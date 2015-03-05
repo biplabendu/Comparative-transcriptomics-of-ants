@@ -1,0 +1,94 @@
+---
+title: "comparing module preservation with monomorium"
+author: "Sasha Mikheyev"
+date: "February 18, 2015"
+output: html_document
+---
+
+
+```{r}
+library(ggplot2)
+library(RMySQL)
+library(WGCNA)
+library(plyr)
+allowWGCNAThreads()
+if (exists("mydb")) dbDisconnect(mydb)
+mydb = dbConnect(MySQL(),  dbname='claire_transcriptomes', host='ECOEVO.UNIT.OIST.JP')
+
+```
+
+```{r}
+moduleNames <- c("Darkgrey", "Darkolivegreen", "Yellowgreen", "Lightcyan1", "Paleturquoise", "Cyan", "Skyblue", "Greenyellow", "Lightcyan", "Black", "Turquoise", "Darkturquoise", "Lightgreen", "Sienna3", "Mediumpurple3", "Royalblue", "Steelblue", "Darkgreen", "Skyblue3", "Brown", "Red", "Darkorange", "Darkmagenta", "Magenta", "Blue", "Violet", "Midnightblue", "Orangered4", "Lightyellow", "Salmon", "Green", "Darkred", "Orange", "Plum1", "Ivory", "Lightsteelblue1" )
+timData <- dbGetQuery(mydb,
+'SELECT pha_clusters.cluster, tim.* FROM claire2tim
+JOIN pha_clusters
+ON claire2tim.claire = pha_clusters.phar
+JOIN tim
+ON tim.id = claire2tim.tim
+JOIN claire
+ON claire.cluster = pha_clusters.cluster
+JOIN clusters
+ON clusters.cluster = claire.cluster
+GROUP BY claire2tim.tim')
+
+claireData <- dbGetQuery(mydb,
+'SELECT clusters.module, claire.* FROM claire2tim
+JOIN pha_clusters
+ON claire2tim.claire = pha_clusters.phar
+JOIN tim
+ON tim.id = claire2tim.tim
+JOIN claire
+ON claire.cluster = pha_clusters.cluster
+JOIN clusters
+ON clusters.cluster = claire.cluster
+GROUP BY claire2tim.tim')
+
+rownames(claireData) <- claireData$cluster
+rownames(timData) <- timData$cluster
+
+overlap <- overlapTable(claireData[rownames(timData),"module"],timData$colors,ignore="grey")
+
+op <- cbind(melt(overlap$p),melt(overlap$countTable)[,3])
+colnames(op) <- c("Var1","Var2","p","count")
+op$p <- p.adjust(op$p,method="fdr")
+op$alpha <- 0
+op$alpha[op$p<0.05] <- 1
+
+op <- op[(op$Var1 %in% moduleNames),]
+#give modules numbers
+op$moduleNumbers <- mapvalues(op$Var1, from = moduleNames, to = 1:length(moduleNames))
+op$moduleNumbers <- factor(op$moduleNumbers,levels = 1:length(moduleNames))
+
+workerModules <- c(7,8,10,12,17,25,26,32,33,36)
+queenModules <- c(5,6,13,20,21,27,28,31,34)
+op$caste <- "not biased"
+op$caste[workerModules] <- "worker"
+op$caste[queenModules] <- "queen"
+
+ggplot(op,aes(x=moduleNumbers,y=Var2,fill=p,label=count))+geom_tile(aes(alpha=alpha))+scale_fill_gradient(limits = c(0,.05), high = "#FFD9D9",low = "#FF4D4D")+theme_bw()+geom_text(aes(alpha=alpha))+guides(alpha=FALSE)+xlab("Modules from this study")+ylab("Worker forager modules from\nMikheyev & Linksvayer (2015)")+ theme(axis.text.x = element_text(angle = 90, hjust = 1),axis.title=element_text(size=16))
+
+
+multiExpr <- list()
+multiExpr[["claire"]] <- list(data = t(subset(claireData[rownames(timData),],select=-c(module,cluster))))
+multiExpr[["tim"]] <- list(data = t(subset(timData,select=-c(id,cluster,colors))))
+
+# create lists of modules
+multiColor <- list()
+multiColor[["claire"]] <-claireData[rownames(timData),"module"]
+mp  <- modulePreservation(multiExpr, multiColor, referenceNetworks = 1, nPermutations = 200, randomSeed = 1, quickCor = 0, verbose = 3)
+
+plotData <- mp$preservation$Z$ref.claire[["inColumnsAlsoPresentIn.tim"]]
+#ignore grey and gold modules
+plotData <- plotData[(rownames(plotData) %in% moduleNames),]
+plotData$moduleNames <- factor(rownames(plotData))
+#give modules numbers
+plotData$moduleNames <- mapvalues(plotData$moduleNames, from = moduleNames, to = 1:length(moduleNames))
+
+workerModules <- c(7,8,10,12,17,25,26,32,33,36)
+queenModules <- c(5,6,13,20,21,27,28,31,34)
+plotData$caste <- "not biased"
+plotData$caste[workerModules] <- "worker"
+plotData$caste[queenModules] <- "queen"
+
+ggplot(plotData,aes(x=moduleSize,y=Zsummary.pres,label=moduleNames, color=caste))+geom_text()+geom_hline(yintercept=2,color="red")+theme_bw()+scale_x_log10()+scale_color_manual(values=c("black","red","blue"))
+```

@@ -1,0 +1,39 @@
+library(ape)
+library(caper)
+library(geiger)
+library(phytools)
+library(MCMCglmm)
+library(coda)
+library(batchmeans)
+
+#Data
+phylo1<- read.tree(file="tree_mcmc.tre")
+
+data<-read.csv("input_file.csv", header =T)
+attach(data)
+
+#Ultrametric tree
+chronopl(phylo1, lambda=0.1) -> phylo
+
+#Inverse tree to include phylogeny in the analysis
+inv.phylo<-inverseA(phylo,nodes="TIPS")
+
+#priors 3 different ones
+prior<-list(R=list(V=1, nu=0.002), G=list(G1=list(V=1, nu=0.002)))
+
+#Module
+model_1<-MCMCglmm(MEmodule~Caste + Invasive + Sterile + Monogynous,random=~phylo,
+                 ginverse=list(phylo=inv.phylo$Ainv),prior=prior,data=data,nitt=500000,burnin=150000,thin=500,verbose = FALSE)
+summary(model_1)
+
+model_2<-MCMCglmm(MEmodule~Caste + Invasive + Sterile + Monogynous,random=~phylo,
+                 ginverse=list(phylo=inv.phylo$Ainv),prior=prior,data=data,nitt=500000,burnin=150000,thin=500,verbose = FALSE)
+
+model_3<-MCMCglmm(MEmodule~Caste + Invasive + Sterile + Monogynous,random=~phylo,
+                 ginverse=list(phylo=inv.phylo$Ainv),prior=prior,data=data,nitt=500000,burnin=150000,thin=500,verbose = FALSE)
+
+chainList <- mcmc.list(model_1$Sol,model_2$Sol,model_3$Sol)
+gelman.diag(chainList)
+effectiveSize(chainList)
+plot(chainList)
+summary(chainList)

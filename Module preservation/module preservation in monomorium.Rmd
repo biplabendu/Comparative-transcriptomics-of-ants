@@ -3,6 +3,8 @@ title: "comparing module preservation with monomorium"
 author: "Sasha Mikheyev"
 date: "February 18, 2015"
 output: html_document
+editor_options: 
+  chunk_output_type: console
 ---
 
 
@@ -13,7 +15,8 @@ library(WGCNA)
 library(plyr)
 allowWGCNAThreads()
 if (exists("mydb")) dbDisconnect(mydb)
-mydb = dbConnect(MySQL(),  dbname='claire_transcriptomes', host='ECOEVO.UNIT.OIST.JP')
+# mydb = dbConnect(MySQL(),  dbname='claire_transcriptomes', host='ECOEVO.UNIT.OIST.JP')
+mydb = readr::read_file("./Module preservation/claire_transcriptomes_2015-03-05.sql")
 
 ```
 
